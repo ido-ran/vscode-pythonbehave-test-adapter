@@ -64,6 +64,10 @@ function findNode(searchNode: TestSuiteInfo | TestInfo, id: string): TestSuiteIn
 	return undefined;
 }
 
+function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function runNode(
 	node: TestSuiteInfo | TestInfo,
 	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>
@@ -82,6 +86,8 @@ async function runNode(
 	} else { // node.type === 'test'
 
 		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: node.id, state: 'running' });
+
+		await sleep(1400);
 
 		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: node.id, state: 'passed' });
 

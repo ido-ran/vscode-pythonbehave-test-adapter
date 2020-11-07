@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import { TestAdapter, TestLoadStartedEvent, TestLoadFinishedEvent, TestRunStartedEvent, TestRunFinishedEvent, TestSuiteEvent, TestEvent } from 'vscode-test-adapter-api';
 import { Log } from 'vscode-test-adapter-util';
-import { loadFakeTests, runFakeTests } from './fakeTests';
+import { runFakeTests } from './fakeTests';
+import { PythonExtensionConfiguration } from './python-extension-configuration';
+import { loadBehaveTests } from './loader';
 
 /**
- * This class is intended as a starting point for implementing a "real" TestAdapter.
- * The file `README.md` contains further instructions.
+ * Python Behave - Test Explorer - Adapter.
  */
-export class ExampleAdapter implements TestAdapter {
+export class PythonBehaveAdapter implements TestAdapter {
 
 	private disposables: { dispose(): void }[] = [];
 
@@ -21,6 +22,7 @@ export class ExampleAdapter implements TestAdapter {
 
 	constructor(
 		public readonly workspace: vscode.WorkspaceFolder,
+		private readonly config: PythonExtensionConfiguration,
 		private readonly log: Log
 	) {
 
@@ -30,15 +32,41 @@ export class ExampleAdapter implements TestAdapter {
 		this.disposables.push(this.testStatesEmitter);
 		this.disposables.push(this.autorunEmitter);
 
+		this.registerActions();
+
+		console.log(this.config);
+	}
+
+	private registerActions() {
+        this.disposables.push(vscode.workspace.onDidChangeConfiguration(async configurationChange => {
+            const sectionsToReload = [
+                'python.pythonPath',
+                'python.envFile',
+                'python.testing.cwd',
+                'python.testing.unittestEnabled',
+                'python.testing.unittestArgs',
+                'python.testing.pytestEnabled',
+                'python.testing.pytestPath',
+                'python.testing.pytestArgs',
+                'pythonTestExplorer.testFramework'
+            ];
+
+            const needsReload = sectionsToReload.some(
+                section => configurationChange.affectsConfiguration(section, this.workspace.uri));
+            if (needsReload) {
+                this.log.info('Configuration changed, reloading tests');
+                this.load();
+            }
+		}));
 	}
 
 	async load(): Promise<void> {
 
-		this.log.info('Loading example tests');
+		this.log.info('Loading behave tests');
 
 		this.testsEmitter.fire(<TestLoadStartedEvent>{ type: 'started' });
 
-		const loadedTests = await loadFakeTests();
+		const loadedTests = await loadBehaveTests(this.log, this.workspace.uri);
 
 		this.testsEmitter.fire(<TestLoadFinishedEvent>{ type: 'finished', suite: loadedTests });
 
