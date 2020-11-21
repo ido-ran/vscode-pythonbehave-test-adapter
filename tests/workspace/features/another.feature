@@ -1,5 +1,5 @@
 @amazing
-Feature: showing off behave
+Feature: another feature
 
   @dangerous
   Scenario: run a simple test

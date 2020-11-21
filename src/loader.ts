@@ -1,24 +1,8 @@
 import { spawn } from "child_process";
-import * as vscode from 'vscode';
 import { TestInfo, TestSuiteInfo } from "vscode-test-adapter-api";
 import * as iconv from 'iconv-lite';
 import { Log } from 'vscode-test-adapter-util';
-
-async function getPythonExecutable(workspaceUri: vscode.Uri): Promise<string | undefined> {
-    const extension = vscode.extensions.getExtension('ms-python.python')!;
-    const usingNewInterpreterStorage = extension.packageJSON.featureFlags.usingNewInterpreterStorage;
-
-    if (!usingNewInterpreterStorage) {
-        return undefined;
-    }
-
-    if (!extension.isActive) {
-        await extension.activate();
-    }
-    await extension.exports.ready;
-    const pythonPath = extension.exports.settings.getExecutionDetails(workspaceUri).execCommand[0];
-    return pythonPath;
-}
+import { PythonExtensionConfiguration } from './python-extension-configuration';
 
 interface ProcessResult {
     exitCode: number | null;
@@ -71,11 +55,6 @@ interface BehaveScenario extends BehaveItem {
     // steps - if we'll ever care about steps
 }
 
-const convertToLinuxPath = function (path: string): string {
-    const linuxPath = path.replace(/\\/g, '/');
-    return linuxPath;
-}
-
 function parseLineNo(lineStr: string): number | undefined {
     try {
         const oneBasedLineNo = parseInt(lineStr);
@@ -120,9 +99,9 @@ function convertFeatureToTestSuite(rootPath: string, feature: BehaveFeature): Te
     return featureSuite;
 }
 
-export async function loadBehaveTests(log: Log, workspaceUri: vscode.Uri): Promise<TestSuiteInfo> {
+export async function loadBehaveTests(log: Log, config: PythonExtensionConfiguration): Promise<TestSuiteInfo> {
 
-    const pythonExec = await getPythonExecutable(workspaceUri);
+    const pythonExec = await config.getPythonExecutable();
 
     if (!pythonExec) {
         log.error("Fail to get python executable");
@@ -138,7 +117,7 @@ export async function loadBehaveTests(log: Log, workspaceUri: vscode.Uri): Promi
     const features: TestSuiteInfo[] = [];
 
     if (pythonExec) {
-        const rootPath = convertToLinuxPath(workspaceUri.fsPath);
+        const rootPath = config.getWorkspaceFSPath();
         const jsonOutput = await executeProcessToEnd(pythonExec, rootPath, behaveArgs);
 
         if (jsonOutput.exitCode === 0) {

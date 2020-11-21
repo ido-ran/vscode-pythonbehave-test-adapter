@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { TestAdapter, TestLoadStartedEvent, TestLoadFinishedEvent, TestRunStartedEvent, TestRunFinishedEvent, TestSuiteEvent, TestEvent } from 'vscode-test-adapter-api';
+import { TestAdapter, TestLoadStartedEvent, TestLoadFinishedEvent, TestRunStartedEvent, TestRunFinishedEvent, TestSuiteEvent, TestEvent, TestSuiteInfo } from 'vscode-test-adapter-api';
 import { Log } from 'vscode-test-adapter-util';
-import { runFakeTests } from './fakeTests';
 import { PythonExtensionConfiguration } from './python-extension-configuration';
 import { loadBehaveTests } from './loader';
+import { runTests } from './test-runner';
 
 /**
  * Python Behave - Test Explorer - Adapter.
@@ -11,6 +11,8 @@ import { loadBehaveTests } from './loader';
 export class PythonBehaveAdapter implements TestAdapter {
 
 	private disposables: { dispose(): void }[] = [];
+
+	private rootSuite: TestSuiteInfo | null = null;
 
 	private readonly testsEmitter = new vscode.EventEmitter<TestLoadStartedEvent | TestLoadFinishedEvent>();
 	private readonly testStatesEmitter = new vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>();
@@ -26,15 +28,13 @@ export class PythonBehaveAdapter implements TestAdapter {
 		private readonly log: Log
 	) {
 
-		this.log.info('Initializing example adapter');
+		this.log.info('Initializing python-behave adapter');
 
 		this.disposables.push(this.testsEmitter);
 		this.disposables.push(this.testStatesEmitter);
 		this.disposables.push(this.autorunEmitter);
 
 		this.registerActions();
-
-		console.log(this.config);
 	}
 
 	private registerActions() {
@@ -66,9 +66,9 @@ export class PythonBehaveAdapter implements TestAdapter {
 
 		this.testsEmitter.fire(<TestLoadStartedEvent>{ type: 'started' });
 
-		const loadedTests = await loadBehaveTests(this.log, this.workspace.uri);
+		this.rootSuite = await loadBehaveTests(this.log, this.config);
 
-		this.testsEmitter.fire(<TestLoadFinishedEvent>{ type: 'finished', suite: loadedTests });
+		this.testsEmitter.fire(<TestLoadFinishedEvent>{ type: 'finished', suite: this.rootSuite });
 
 	}
 
@@ -76,10 +76,14 @@ export class PythonBehaveAdapter implements TestAdapter {
 
 		this.log.info(`Running example tests ${JSON.stringify(tests)}`);
 
+		if (!this.rootSuite) {
+			return;
+		}
+
 		this.testStatesEmitter.fire(<TestRunStartedEvent>{ type: 'started', tests });
 
 		// in a "real" TestAdapter this would start a test run in a child process
-		await runFakeTests(tests, this.testStatesEmitter);
+		await runTests(tests, this.rootSuite, this.config, this.log, this.testStatesEmitter);
 
 		this.testStatesEmitter.fire(<TestRunFinishedEvent>{ type: 'finished' });
 

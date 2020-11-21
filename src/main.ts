@@ -10,7 +10,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// create a simple logger that can be configured with the configuration variables
 	// `exampleExplorer.logpanel` and `exampleExplorer.logfile`
-	const log = new Log('exampleExplorer', workspaceFolder, 'Example Explorer Log');
+	const log = new Log('pyhtonBehave', workspaceFolder, 'Python Behave Explorer Log');
 	context.subscriptions.push(log);
 
 	// get the Test Explorer extension
@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		const testHub = testExplorerExtension.exports;
 
-		const config = new PythonExtensionConfiguration();
+		const config = new PythonExtensionConfiguration(workspaceFolder);
 		// this will register an ExampleTestAdapter for each WorkspaceFolder
 		context.subscriptions.push(new TestAdapterRegistrar(
 			testHub,

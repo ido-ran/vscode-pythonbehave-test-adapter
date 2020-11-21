@@ -16,7 +16,7 @@ def step_impl(context):
 
 @then('behave will test it for us!')
 def step_impl(context):
-    assert context.failed is False
+    assert True
 
 @given('the ninja has a third level black-belt')
 def step_impl(context):
@@ -58,4 +58,4 @@ def step_impl(context):
 
 @then('it should transform into blue mush')
 def step_impl(context):
-    assert True
+    assert False
