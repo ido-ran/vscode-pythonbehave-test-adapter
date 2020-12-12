@@ -13,6 +13,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const log = new Log('pyhtonBehave', workspaceFolder, 'Python Behave Explorer Log');
 	context.subscriptions.push(log);
 
+	const testOutputChannel = vscode.window.createOutputChannel("Python Behave Test Run");
+
 	// get the Test Explorer extension
 	const testExplorerExtension = vscode.extensions.getExtension<TestHub>(testExplorerExtensionId);
 	if (log.enabled) log.info(`Test Explorer ${testExplorerExtension ? '' : 'not '}found`);
@@ -25,7 +27,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		// this will register an ExampleTestAdapter for each WorkspaceFolder
 		context.subscriptions.push(new TestAdapterRegistrar(
 			testHub,
-			workspaceFolder => new PythonBehaveAdapter(workspaceFolder, config, log),
+			workspaceFolder => new PythonBehaveAdapter(workspaceFolder, config, log, testOutputChannel),
 			log
 		));
 	}

@@ -25,7 +25,8 @@ export class PythonBehaveAdapter implements TestAdapter {
 	constructor(
 		public readonly workspace: vscode.WorkspaceFolder,
 		private readonly config: PythonExtensionConfiguration,
-		private readonly log: Log
+		private readonly log: Log,
+		private readonly testOutputChannel: vscode.OutputChannel,
 	) {
 
 		this.log.info('Initializing python-behave adapter');
@@ -83,7 +84,7 @@ export class PythonBehaveAdapter implements TestAdapter {
 		this.testStatesEmitter.fire(<TestRunStartedEvent>{ type: 'started', tests });
 
 		// in a "real" TestAdapter this would start a test run in a child process
-		await runTests(tests, this.rootSuite, this.config, this.log, this.testStatesEmitter);
+		await runTests(tests, this.rootSuite, this.config, this.log, this.testStatesEmitter, this.testOutputChannel);
 
 		this.testStatesEmitter.fire(<TestRunFinishedEvent>{ type: 'finished' });
 

@@ -4,7 +4,17 @@ import { TestSuiteInfo, TestInfo, TestRunStartedEvent, TestRunFinishedEvent, Tes
 import { Log } from 'vscode-test-adapter-util';
 import { PythonExtensionConfiguration } from './python-extension-configuration';
 
-function executeProcess(command: string, cwd: string, args: string[], testOutputChannel: vscode.OutputChannel): Promise<number> {
+type ExecuteProcessResult = {
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+}
+
+function executeProcess(
+	command: string, 
+	cwd: string, 
+	args: string[], 
+	testOutputChannel: vscode.OutputChannel): Promise<ExecuteProcessResult> {
     const child = spawn(
         command, args,
         {
@@ -13,22 +23,21 @@ function executeProcess(command: string, cwd: string, args: string[], testOutput
         },
     );
 
-    return new Promise<number>((resolve, reject) => {
-		// const re = /[\r\n]/
+	let stdOutBuffer = "";
+	let stdErrBuffer = "";
 
+    return new Promise<ExecuteProcessResult>((resolve, reject) => {
         child.stdout!.on('data', (chunk) => {
 			const chunkstr = chunk.toString();
 			testOutputChannel.append(chunkstr);
-			// for (const line of chunkstr.split(re)) {
-			// 	if (line) {
-			// 		console.log("----- start ------ ");
-			// 		console.log(line);
-			// 		console.log("----- end ------ ");
-			// 	}
-			// }
+
+			stdOutBuffer += chunkstr;
 		});
         child.stderr!.on('data', (chunk) => {
-			testOutputChannel.append(chunk.toString());
+			const chunkstr = chunk.toString();
+			testOutputChannel.append(chunkstr);
+
+			stdErrBuffer += chunkstr;
 		});
 
         child.once('exit', exitCode => {
@@ -39,9 +48,13 @@ function executeProcess(command: string, cwd: string, args: string[], testOutput
 
 			// const output = iconv.decode(Buffer.concat(stdoutBuffer), 'utf8');
 			if (exitCode == null) {
-				reject("exitCode is null");
+				reject(stdErrBuffer || stdOutBuffer);
 			} else {
-				resolve(exitCode);
+				resolve({
+					exitCode: exitCode,
+					stdout: stdOutBuffer,
+					stderr: stdErrBuffer
+				});
 			}
         });
 
@@ -106,13 +119,14 @@ async function runSingleBehaveTest(
 
 	const rootPath = config.getWorkspaceFSPath();
 
-	try {
-		const exitCode: number = await executeProcess(pythonExec, rootPath, behaveArgs, testOutputChannel);
+	try { 
+		const processResult: ExecuteProcessResult = await executeProcess(pythonExec, rootPath, behaveArgs, testOutputChannel);
 	
-		if (exitCode === 0) {
-			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'passed' });
+		const message = processResult.stderr || processResult.stdout;
+		if (processResult.exitCode === 0) {
+			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'passed', message });
 		} else {
-			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'failed' });
+			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'failed', message });
 		}
 	} catch (err) {
 		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'errored', message: err });
