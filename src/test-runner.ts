@@ -3,9 +3,8 @@ import * as vscode from 'vscode';
 import { TestSuiteInfo, TestInfo, TestRunStartedEvent, TestRunFinishedEvent, TestSuiteEvent, TestEvent } from 'vscode-test-adapter-api';
 import { Log } from 'vscode-test-adapter-util';
 import { PythonExtensionConfiguration } from './python-extension-configuration';
-import { chomp, chunksToLinesAsync } from '@rauschma/stringio';
 
-function executeProcess(command: string, cwd: string, args: string[]): Promise<number> {
+function executeProcess(command: string, cwd: string, args: string[], testOutputChannel: vscode.OutputChannel): Promise<number> {
     const child = spawn(
         command, args,
         {
@@ -15,22 +14,21 @@ function executeProcess(command: string, cwd: string, args: string[]): Promise<n
     );
 
     return new Promise<number>((resolve, reject) => {
-		const stderrBuffer: Buffer[] = [];
-		
-		const re = /[\r\n]/
+		// const re = /[\r\n]/
 
         child.stdout!.on('data', (chunk) => {
 			const chunkstr = chunk.toString();
-			for (const line of chunkstr.split(re)) {
-				if (line) {
-					console.log("----- start ------ ");
-					console.log(line);
-					console.log("----- end ------ ");
-				}
-			}
+			testOutputChannel.append(chunkstr);
+			// for (const line of chunkstr.split(re)) {
+			// 	if (line) {
+			// 		console.log("----- start ------ ");
+			// 		console.log(line);
+			// 		console.log("----- end ------ ");
+			// 	}
+			// }
 		});
         child.stderr!.on('data', (chunk) => {
-			console.error(chunk);
+			testOutputChannel.append(chunk.toString());
 		});
 
         child.once('exit', exitCode => {
@@ -39,8 +37,12 @@ function executeProcess(command: string, cwd: string, args: string[]): Promise<n
                 reject({exitCode: exitCode, message: `process cancelled`});
             }
 
-            // const output = iconv.decode(Buffer.concat(stdoutBuffer), 'utf8');
-            resolve(55);
+			// const output = iconv.decode(Buffer.concat(stdoutBuffer), 'utf8');
+			if (exitCode == null) {
+				reject("exitCode is null");
+			} else {
+				resolve(exitCode);
+			}
         });
 
         child.once('error', error => {
@@ -56,27 +58,65 @@ export async function runTests(
 	rootSuite: TestSuiteInfo,
 	config: PythonExtensionConfiguration,
 	log: Log,
-	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>
+	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>,
+	testOutputChannel: vscode.OutputChannel,
 ): Promise<void> {
 
+	testOutputChannel.clear();
+	testOutputChannel.show(true);
+
+	for (const suiteOrTestId of tests) {
+		const node = findNode(rootSuite, suiteOrTestId);
+		if (node) {
+			await runNode(node, testStatesEmitter, config, log, testOutputChannel);
+		}
+	}
+
+}
+
+async function runSingleBehaveTest(
+	testNode: TestInfo,
+	config: PythonExtensionConfiguration,
+	log: Log,
+	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>,
+	testOutputChannel: vscode.OutputChannel,
+) {
     const pythonExec = await config.getPythonExecutable();
 
 	if (!pythonExec) {
-		log.error("Fail to get python executable");
-		return;
+		return log.error("Fail to get python executable");
 	}
 	
+	if (!testNode.file) {
+		return log.error(`Cannot run test because testNode.file is not set for ${testNode.id}`);
+	}
+
+	if (!testNode.line) {
+		return log.error(`Cannot run test because testNode.line is not set for ${testNode.id}`);
+	}
+
 	const behaveArgs = [
 		"-u",
         "-m", "behave", 
-        "--format", "plain", 
-        "--no-summary"
+		"--format", "pretty",
+		"--no-skipped",
+		"--no-summary",
+		`${testNode.file}:${testNode.line + 1}`
 	];
 
 	const rootPath = config.getWorkspaceFSPath();
 
-	executeProcess(pythonExec, rootPath, behaveArgs);
+	try {
+		const exitCode: number = await executeProcess(pythonExec, rootPath, behaveArgs, testOutputChannel);
 	
+		if (exitCode === 0) {
+			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'passed' });
+		} else {
+			testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'failed' });
+		}
+	} catch (err) {
+		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: testNode.id, state: 'errored', message: err });
+	}
     // const child = spawn(
     //     pythonExec, behaveArgs,
     //     {
@@ -114,13 +154,12 @@ function findNode(searchNode: TestSuiteInfo | TestInfo, id: string): TestSuiteIn
 	return undefined;
 }
 
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 async function runNode(
 	node: TestSuiteInfo | TestInfo,
-	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>
+	testStatesEmitter: vscode.EventEmitter<TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent>,
+	config: PythonExtensionConfiguration,
+	log: Log,
+	testOutputChannel: vscode.OutputChannel,
 ): Promise<void> {
 
 	if (node.type === 'suite') {
@@ -128,7 +167,7 @@ async function runNode(
 		testStatesEmitter.fire(<TestSuiteEvent>{ type: 'suite', suite: node.id, state: 'running' });
 
 		for (const child of node.children) {
-			await runNode(child, testStatesEmitter);
+			await runNode(child, testStatesEmitter, config, log, testOutputChannel);
 		}
 
 		testStatesEmitter.fire(<TestSuiteEvent>{ type: 'suite', suite: node.id, state: 'completed' });
@@ -137,9 +176,6 @@ async function runNode(
 
 		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: node.id, state: 'running' });
 
-		await sleep(1400);
-
-		testStatesEmitter.fire(<TestEvent>{ type: 'test', test: node.id, state: 'passed' });
-
+		await runSingleBehaveTest(node, config, log, testStatesEmitter, testOutputChannel);
 	}
 }
