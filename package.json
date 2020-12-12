@@ -66,14 +66,14 @@
   "contributes": {
     "configuration": {
       "type": "object",
-      "title": "Example Test Explorer configuration",
+      "title": "Python Behave Tests",
       "properties": {
-        "exampleExplorer.logpanel": {
+        "pyhtonBehave.logpanel": {
           "description": "write diagnotic logs to an output panel",
           "type": "boolean",
           "scope": "resource"
         },
-        "exampleExplorer.logfile": {
+        "pyhtonBehave.logfile": {
           "description": "write diagnostic logs to the given file",
           "type": "string",
           "scope": "resource"
