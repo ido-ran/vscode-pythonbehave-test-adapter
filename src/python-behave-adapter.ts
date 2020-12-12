@@ -4,6 +4,7 @@ import { Log } from 'vscode-test-adapter-util';
 import { PythonExtensionConfiguration } from './python-extension-configuration';
 import { loadBehaveTests } from './loader';
 import { runTests } from './test-runner';
+import { debugTest } from './test-runner';
 
 /**
  * Python Behave - Test Explorer - Adapter.
@@ -90,11 +91,19 @@ export class PythonBehaveAdapter implements TestAdapter {
 
 	}
 
-/*	implement this method if your TestAdapter supports debugging tests
 	async debug(tests: string[]): Promise<void> {
-		// start a test run in a child process and attach the debugger to it...
+		if (!this.rootSuite) {
+			vscode.window.showInformationMessage("Test suite is not loaded yet");
+			return;
+		}
+
+		if (tests.length > 1) {
+			vscode.window.showInformationMessage("You can only debug one test at a time");
+			return;
+		}
+
+		debugTest(this.rootSuite, tests[0], this.workspace, this.log);
 	}
-*/
 
 	cancel(): void {
 		// in a "real" TestAdapter this would kill the child process for the current test run (if there is any)

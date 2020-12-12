@@ -193,3 +193,33 @@ async function runNode(
 		await runSingleBehaveTest(node, config, log, testStatesEmitter, testOutputChannel);
 	}
 }
+
+export async function debugTest(
+	testSuite: TestSuiteInfo,
+	test: string,
+	workspace: vscode.WorkspaceFolder,
+	log: Log,
+): Promise<void> {
+
+	const node = findNode(testSuite, test);
+	if (node && node.type == "test" && !!node.line) {
+		try {
+			await vscode.debug.startDebugging(workspace,
+				{
+					name: "debug-behave",
+					type: 'python',
+					request: 'launch',
+					console: 'internalConsole',
+					justMyCode: true,
+					module: "behave",
+					args: [
+						`${node.file}:${node.line + 1}`,
+						"--no-skipped"
+					]
+				});
+		} catch (exception) {
+			log.error(`Failed to start debugging tests: ${exception}`);
+		}
+
+	}
+}
